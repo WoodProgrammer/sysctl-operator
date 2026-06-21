@@ -233,6 +233,7 @@ type SysctlProfileStatus struct {
 // +kubebuilder:printcolumn:name="Failed",type=integer,JSONPath=`.status.failedNodes`
 // +kubebuilder:printcolumn:name="ErroredPods",type=integer,JSONPath=`.status.erroredPods`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:metadata:annotations="api-approved.kubernetes.io=https://github.com/kubernetes/enhancements/pull/1111"
 
 // SysctlProfile is the Schema for the sysctlprofiles API
 type SysctlProfile struct {

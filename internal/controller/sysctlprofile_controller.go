@@ -18,7 +18,9 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -49,7 +51,17 @@ type SysctlProfileReconciler struct {
 func (r *SysctlProfileReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
 
-	// TODO(user): your logic here
+	var profile sysctlv1alpha1.SysctlProfile
+	if err := r.Get(ctx, req.NamespacedName, &profile); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+
+	// artık profile.Spec, profile.Status vs erişebilirsin
+	fmt.Println(profile.Spec.Sysctls)
+	fmt.Println(profile.Spec.Rollout.BatchSize)
 
 	return ctrl.Result{}, nil
 }

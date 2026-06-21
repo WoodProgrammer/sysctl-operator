@@ -1,9 +1,55 @@
 apiVersion: sysctl.k8s.io/v1alpha1
 kind: SysctlProfile
 metadata:
+  name: aks-network-optimized
+  namespace: kube-system
   labels:
     app.kubernetes.io/name: sysctl-operator
     app.kubernetes.io/managed-by: kustomize
-  name: sysctlprofile-sample
 spec:
-  # TODO(user): Add fields here
+  nodeSelector:
+    matchLabels:
+      agentpool: highperf
+
+  rollout:
+    batchSize: 10
+    batchInterval: 30s
+    failureThreshold: 2
+    pauseOnFailure: true
+
+  schedule:
+    driftCheck: "*/5 * * * *"
+    reconcile: "0 * * * *"
+
+  strategy:
+    type: Enforce       # Audit | Once | Enforce
+
+  sysctls:
+    - name: net.core.rmem_max
+      value: "2500000"
+      persistent: true
+
+    - name: net.core.wmem_max
+      value: "2500000"
+      persistent: true
+
+    - name: net.core.somaxconn
+      value: "65535"
+      persistent: true
+
+    - name: net.ipv4.tcp_congestion_control
+      value: bbr
+      persistent: true
+
+    - name: fs.file-max
+      value: "1000000"
+      persistent: true
+
+    - name: net.ipv4.conf.{iface}.rp_filter
+      value: "0"
+      persistent: true
+      interfaceSelector:
+        prefixes: ["eth", "ens", "azure"]
+        exclude: ["lo", "cilium_host", "cilium_net"]
+
+  restoreOnDelete: true
