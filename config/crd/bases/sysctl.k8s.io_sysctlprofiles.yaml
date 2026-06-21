@@ -14,7 +14,26 @@ spec:
     singular: sysctlprofile
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.strategy.type
+      name: Strategy
+      type: string
+    - jsonPath: .status.desiredNodes
+      name: Desired
+      type: integer
+    - jsonPath: .status.appliedNodes
+      name: Applied
+      type: integer
+    - jsonPath: .status.failedNodes
+      name: Failed
+      type: integer
+    - jsonPath: .status.erroredPods
+      name: ErroredPods
+      type: integer
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: SysctlProfile is the Schema for the sysctlprofiles API
@@ -39,25 +58,170 @@ spec:
           spec:
             description: spec defines the desired state of SysctlProfile
             properties:
-              foo:
-                description: foo is an example field of SysctlProfile. Edit sysctlprofile_types.go
-                  to remove/update
-                type: string
+              nodeSelector:
+                description: nodeSelector selects the nodes this profile applies to.
+                properties:
+                  matchExpressions:
+                    description: matchExpressions is a list of label selector requirements.
+                      The requirements are ANDed.
+                    items:
+                      description: |-
+                        A label selector requirement is a selector that contains values, a key, and an operator that
+                        relates the key and values.
+                      properties:
+                        key:
+                          description: key is the label key that the selector applies
+                            to.
+                          type: string
+                        operator:
+                          description: |-
+                            operator represents a key's relationship to a set of values.
+                            Valid operators are In, NotIn, Exists and DoesNotExist.
+                          type: string
+                        values:
+                          description: |-
+                            values is an array of string values. If the operator is In or NotIn,
+                            the values array must be non-empty. If the operator is Exists or DoesNotExist,
+                            the values array must be empty. This array is replaced during a strategic
+                            merge patch.
+                          items:
+                            type: string
+                          type: array
+                          x-kubernetes-list-type: atomic
+                      required:
+                      - key
+                      - operator
+                      type: object
+                    type: array
+                    x-kubernetes-list-type: atomic
+                  matchLabels:
+                    additionalProperties:
+                      type: string
+                    description: |-
+                      matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels
+                      map is equivalent to an element of matchExpressions, whose key field is "key", the
+                      operator is "In", and the values array contains only "value". The requirements are ANDed.
+                    type: object
+                type: object
+                x-kubernetes-map-type: atomic
+              restoreOnDelete:
+                description: |-
+                  restoreOnDelete, when true, removes the persistent drop-in file from the
+                  nodes when the profile is deleted.
+                type: boolean
+              rollout:
+                description: rollout controls batched rollout behavior.
+                properties:
+                  batchInterval:
+                    description: batchInterval is the minimum wait between launching
+                      successive batches.
+                    type: string
+                  batchSize:
+                    default: 1
+                    description: batchSize is the maximum number of nodes updated
+                      concurrently.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  failureThreshold:
+                    default: 0
+                    description: |-
+                      failureThreshold is the number of failed nodes tolerated before the
+                      rollout is considered failing.
+                    format: int32
+                    minimum: 0
+                    type: integer
+                  pauseOnFailure:
+                    description: |-
+                      pauseOnFailure halts the rollout (stops launching new batches) once
+                      failureThreshold is reached.
+                    type: boolean
+                type: object
+              schedule:
+                description: schedule holds cron expressions for periodic drift checks
+                  and reconciles.
+                properties:
+                  driftCheck:
+                    description: |-
+                      driftCheck is a cron expression controlling how often nodes are audited
+                      for drift from the desired sysctl values.
+                    type: string
+                  reconcile:
+                    description: reconcile is a cron expression controlling a full
+                      periodic reconcile.
+                    type: string
+                type: object
+              strategy:
+                description: strategy selects how values are applied and maintained.
+                properties:
+                  type:
+                    default: Enforce
+                    description: type is one of Audit, Once, or Enforce.
+                    enum:
+                    - Audit
+                    - Once
+                    - Enforce
+                    type: string
+                type: object
+              sysctls:
+                description: sysctls is the list of kernel parameters to manage.
+                items:
+                  description: Sysctl is a single kernel parameter to manage.
+                  properties:
+                    interfaceSelector:
+                      description: |-
+                        interfaceSelector expands a "{iface}" placeholder in name across the
+                        matching network interfaces on each node.
+                      properties:
+                        exclude:
+                          description: |-
+                            exclude removes specific interface names from the match set,
+                            e.g. ["lo", "cilium_host", "cilium_net"].
+                          items:
+                            type: string
+                          type: array
+                        prefixes:
+                          description: prefixes matches interface names by prefix,
+                            e.g. ["eth", "ens", "azure"].
+                          items:
+                            type: string
+                          type: array
+                      type: object
+                    name:
+                      description: |-
+                        name is the sysctl key, e.g. "net.core.rmem_max".
+                        It may contain the "{iface}" placeholder, which is expanded per matching
+                        network interface using interfaceSelector.
+                      type: string
+                    persistent:
+                      description: |-
+                        persistent, when true, also writes the value to a drop-in file under
+                        /etc/sysctl.d so it survives reboots.
+                      type: boolean
+                    value:
+                      description: value is the desired value for the sysctl key.
+                      type: string
+                  required:
+                  - name
+                  - value
+                  type: object
+                minItems: 1
+                type: array
+            required:
+            - nodeSelector
+            - sysctls
             type: object
           status:
             description: status defines the observed state of SysctlProfile
             properties:
+              appliedNodes:
+                description: appliedNodes is the number of nodes at the desired config
+                  hash.
+                format: int32
+                type: integer
               conditions:
-                description: |-
-                  conditions represent the current state of the SysctlProfile resource.
-                  Each condition has a unique type and reflects the status of a specific aspect of the resource.
-
-                  Standard condition types include:
-                  - "Available": the resource is fully functional
-                  - "Progressing": the resource is being created or updated
-                  - "Degraded": the resource failed to reach or maintain its desired state
-
-                  The status of each condition is one of True, False, or Unknown.
+                description: conditions represent the current state of the SysctlProfile
+                  resource.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -116,6 +280,69 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              desiredNodes:
+                description: desiredNodes is the number of nodes selected by nodeSelector.
+                format: int32
+                type: integer
+              driftedNodes:
+                description: driftedNodes is the number of nodes found drifted during
+                  the last audit.
+                format: int32
+                type: integer
+              erroredPods:
+                description: erroredPods is the cumulative count of applier pods that
+                  ended in error.
+                format: int32
+                type: integer
+              failedNodes:
+                description: failedNodes is the number of nodes that exhausted their
+                  retries.
+                format: int32
+                type: integer
+              lastRolloutTime:
+                description: lastRolloutTime is when the controller last launched
+                  applier pods.
+                format: date-time
+                type: string
+              nodeStatuses:
+                description: nodeStatuses holds per-node state.
+                items:
+                  description: NodeStatus is the per-node observed state.
+                  properties:
+                    appliedHash:
+                      description: appliedHash is the config hash last successfully
+                        applied to the node.
+                      type: string
+                    failCount:
+                      description: failCount is the number of consecutive apply failures
+                        observed.
+                      format: int32
+                      type: integer
+                    lastTransitionTime:
+                      description: lastTransitionTime is when the phase last changed.
+                      format: date-time
+                      type: string
+                    message:
+                      description: message carries the last human-readable detail
+                        for the node.
+                      type: string
+                    nodeName:
+                      description: nodeName is the name of the node.
+                      type: string
+                    phase:
+                      description: phase is the current node phase.
+                      type: string
+                  required:
+                  - nodeName
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - nodeName
+                x-kubernetes-list-type: map
+              observedHash:
+                description: observedHash is the config hash the controller has reconciled
+                  against.
+                type: string
             type: object
         required:
         - spec
