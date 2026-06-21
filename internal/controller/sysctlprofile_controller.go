@@ -42,20 +42,26 @@ const (
 	// configVolumeName is the name of the volume that carries the rendered
 	// sysctl drop-in into the applier pods.
 	configVolumeName = "sysctl-config"
+
+	imagePullPolicy = "Always"
 	// configMountPath is where the ConfigMap is mounted inside each pod.
 	configMountPath = "/etc/sysctl.d"
 	// configFileName is the drop-in file name rendered into the ConfigMap.
 	configFileName = "99-sysctl-operator.conf"
+	// hostSysVolumeName / hostSysPath mount the node's /proc/sys into the pods
+	// so the worker reads and writes the host's live sysctl tree.
+	hostSysVolumeName = "host-sys"
+	hostSysPath       = "/proc/sys"
 	// applierImage is the placeholder image used to run the applier pods.
 	// TODO: replace with an image that actually applies the mounted sysctls.
-	applierImage = "nginx:latest"
+	applierImage = "emirozbir/sysctl-operator-worker:v6-amd64"
 	// driftCheckerImage is the placeholder image for the drift-check CronJob.
 	// TODO: replace with the real drift-checker image (passed in later).
-	driftCheckerImage = "busybox:latest"
+	driftCheckerImage = "emirozbir/sysctl-operator-worker:v6-amd64"
 	// reportURL is where drift-check pods POST their findings. It assumes a
 	// Service named "sysctl-operator-report" fronts the operator on port 9090.
 	// TODO: make this configurable / inject the operator namespace.
-	reportURL = "http://sysctl-operator-report:9090/api/v1/reports"
+	reportURL = "http://sysctl-operator-report.sysctl-operator-system:9090/api/v1/reports"
 
 	labelProfile  = "sysctl.k8s.io/profile"
 	configHashAnn = "sysctl.k8s.io/config-hash"
@@ -237,22 +243,53 @@ func (r *SysctlProfileReconciler) ensureDaemonSet(ctx context.Context, profile *
 		// DaemonSet node placement uses matchLabels from the profile selector.
 		ds.Spec.Template.Spec.NodeSelector = profile.Spec.NodeSelector.MatchLabels
 
-		ds.Spec.Template.Spec.Volumes = []corev1.Volume{{
-			Name: configVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: name},
+		// Applier pods act on the host kernel: share the host network/PID/IPC
+		// namespaces so namespaced sysctls (net.*, kernel.ipc/*) target the node.
+		ds.Spec.Template.Spec.HostNetwork = true
+		ds.Spec.Template.Spec.HostPID = true
+		ds.Spec.Template.Spec.HostIPC = true
+		// With hostNetwork the default dnsPolicy (ClusterFirst) uses the node's
+		// resolver; ClusterFirstWithHostNet is required to resolve in-cluster
+		// names (e.g. the operator's report Service).
+		ds.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirstWithHostNet
+
+		ds.Spec.Template.Spec.Volumes = []corev1.Volume{
+			{
+				Name: configVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: name},
+					},
 				},
 			},
-		}}
+			{
+				Name: hostSysVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{Path: hostSysPath},
+				},
+			},
+		}
 		ds.Spec.Template.Spec.Containers = []corev1.Container{{
-			Name:  "applier",
-			Image: applierImage,
-			VolumeMounts: []corev1.VolumeMount{{
-				Name:      configVolumeName,
-				MountPath: configMountPath,
-				ReadOnly:  true,
-			}},
+			Name:            "applier",
+			Image:           applierImage,
+			ImagePullPolicy: imagePullPolicy,
+			SecurityContext: privilegedSecurityContext(),
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      configVolumeName,
+					MountPath: configMountPath,
+					ReadOnly:  true,
+				},
+			},
+			Env: []corev1.EnvVar{
+				{Name: "PROFILE", Value: profile.Name},
+				{Name: "NAMESPACE", Value: profile.Namespace},
+				{Name: "CONFIG_HASH", Value: hash},
+				{Name: "REPORT_URL", Value: reportURL},
+				{Name: "NODE_NAME", ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
+				}},
+			},
 		}}
 		return controllerutil.SetControllerReference(profile, ds, r.Scheme)
 	})
@@ -297,17 +334,36 @@ func (r *SysctlProfileReconciler) ensureCronJob(ctx context.Context, profile *sy
 		pod.RestartPolicy = corev1.RestartPolicyOnFailure
 		pod.NodeSelector = profile.Spec.NodeSelector.MatchLabels
 
-		pod.Volumes = []corev1.Volume{{
-			Name: configVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: resourceName(profile)},
+		// Same host namespaces as the applier so the checker reads the node's
+		// live values, not the pod's isolated namespaces.
+		pod.HostNetwork = true
+		pod.HostPID = true
+		pod.HostIPC = true
+		// hostNetwork pods need ClusterFirstWithHostNet to resolve in-cluster
+		// DNS names (e.g. the operator's report Service).
+		pod.DNSPolicy = corev1.DNSClusterFirstWithHostNet
+
+		pod.Volumes = []corev1.Volume{
+			{
+				Name: configVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					ConfigMap: &corev1.ConfigMapVolumeSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: resourceName(profile)},
+					},
 				},
 			},
-		}}
+			{
+				Name: hostSysVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{Path: hostSysPath},
+				},
+			},
+		}
 		pod.Containers = []corev1.Container{{
-			Name:  "drift-checker",
-			Image: driftCheckerImage,
+			Name:            "drift-checker",
+			Image:           driftCheckerImage,
+			ImagePullPolicy: imagePullPolicy,
+			SecurityContext: privilegedSecurityContext(),
 			Env: []corev1.EnvVar{
 				{Name: "PROFILE", Value: profile.Name},
 				{Name: "NAMESPACE", Value: profile.Namespace},
@@ -317,11 +373,13 @@ func (r *SysctlProfileReconciler) ensureCronJob(ctx context.Context, profile *sy
 					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
 				}},
 			},
-			VolumeMounts: []corev1.VolumeMount{{
-				Name:      configVolumeName,
-				MountPath: configMountPath,
-				ReadOnly:  true,
-			}},
+			VolumeMounts: []corev1.VolumeMount{
+				{
+					Name:      configVolumeName,
+					MountPath: configMountPath,
+					ReadOnly:  true,
+				},
+			},
 		}}
 		return controllerutil.SetControllerReference(profile, cj, r.Scheme)
 	})
@@ -430,6 +488,13 @@ func resourceName(p *sysctlv1alpha1.SysctlProfile) string {
 // cronJobName is the name of the drift-check CronJob for a profile.
 func cronJobName(p *sysctlv1alpha1.SysctlProfile) string {
 	return p.Name + "-drift"
+}
+
+// privilegedSecurityContext returns a container security context with privileged
+// enabled, required to write the host's /proc/sys via "sysctl -w".
+func privilegedSecurityContext() *corev1.SecurityContext {
+	privileged := true
+	return &corev1.SecurityContext{Privileged: &privileged}
 }
 
 // labelsFor returns the common labels applied to managed resources.

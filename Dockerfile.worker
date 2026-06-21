@@ -1,0 +1,33 @@
+# Build the worker binary (sysctl applier / drift-checker daemon)
+FROM golang:1.26 AS builder
+ARG TARGETOS
+ARG TARGETARCH
+
+# Force module mode so the build never falls back to GOPATH/legacy resolution
+# (this is what produces "package sysctl-operator/internal/... is not in std").
+ENV GO111MODULE=on
+ENV CGO_ENABLED=0
+
+WORKDIR /workspace
+# Copy the Go Modules manifests
+COPY go.mod go.mod
+COPY go.sum go.sum
+# Cache deps before building so source changes don't invalidate the layer.
+RUN go mod download
+
+# Copy the Go source (relies on .dockerignore to filter)
+COPY . .
+
+# Build the worker. GOARCH is left to the build platform so the binary matches
+# the target image platform (see the manager Dockerfile for details).
+RUN GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o worker cmd/worker/main.go
+
+# Alpine base so the "sysctl" binary (procps) is available — the worker shells
+# out to "sysctl -w". This image runs as root; the pod must also be privileged
+# (set via the pod's securityContext) for the writes to take effect on the host.
+FROM ubuntu:latest
+RUN apt update && apt install -y procps
+WORKDIR /
+COPY --from=builder /workspace/worker /worker
+
+ENTRYPOINT ["/worker"]

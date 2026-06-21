@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: sysctl-operator-report
+  namespace: sysctl-operator-system
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: sysctl-operator
+  ports:
+    - protocol: TCP
+      port: 9090
+      targetPort: 9090
