@@ -344,6 +344,12 @@ spec:
                 description: observedHash is the config hash the controller has reconciled
                   against.
                 type: string
+              teardownHash:
+                description: |-
+                  teardownHash is the config hash for which the applier DaemonSet has been
+                  torn down after a fully successful rollout. When it differs from the
+                  current config hash, the DaemonSet is (re)created to apply the new config.
+                type: string
             type: object
         required:
         - spec

@@ -188,6 +188,12 @@ type SysctlProfileStatus struct {
 	// +optional
 	ObservedHash string `json:"observedHash,omitempty"`
 
+	// teardownHash is the config hash for which the applier DaemonSet has been
+	// torn down after a fully successful rollout. When it differs from the
+	// current config hash, the DaemonSet is (re)created to apply the new config.
+	// +optional
+	TeardownHash string `json:"teardownHash,omitempty"`
+
 	// desiredNodes is the number of nodes selected by nodeSelector.
 	// +optional
 	DesiredNodes int32 `json:"desiredNodes"`
