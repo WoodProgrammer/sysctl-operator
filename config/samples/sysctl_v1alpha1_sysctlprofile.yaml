@@ -1,0 +1,9 @@
+apiVersion: sysctl.k8s.io/v1alpha1
+kind: SysctlProfile
+metadata:
+  labels:
+    app.kubernetes.io/name: sysctl-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: sysctlprofile-sample
+spec:
+  # TODO(user): Add fields here
