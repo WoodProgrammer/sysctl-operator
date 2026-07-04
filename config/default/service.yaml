@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    control-plane: controller-manager
+    app.kubernetes.io/name: sysctl-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: sysctl-operator-report
+  namespace: sysctl-operator-system
+spec:
+  ports:
+  - name: https
+    port: 9090
+    protocol: TCP
+    targetPort: 9090
+  selector:
+    control-plane: controller-manager
+    app.kubernetes.io/name: sysctl-operator
