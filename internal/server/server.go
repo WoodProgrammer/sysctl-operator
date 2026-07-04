@@ -39,10 +39,13 @@ import (
 // StatusReport is the payload an applier pod POSTs to report the outcome of
 // applying a profile's sysctls on a single node.
 type StatusReport struct {
-	// Profile is the SysctlProfile name.
+	// Profile is the profile name.
 	Profile string `json:"profile"`
-	// Namespace is the SysctlProfile namespace.
+	// Namespace is the profile namespace.
 	Namespace string `json:"namespace"`
+	// Kind routes the report to the owning CRD; kindScriptProfile targets a
+	// ScriptProfile, empty (the default) targets a SysctlProfile.
+	Kind string `json:"kind,omitempty"`
 	// Node is the node the applier pod ran on.
 	Node string `json:"node"`
 	// Pod is the reporting pod name (optional, for diagnostics).
@@ -148,8 +151,17 @@ func (s *ReportServer) handleReport(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// applyReport records the report on the profile's status, retrying on conflict.
+// kindScriptProfile is the report Kind that routes to a ScriptProfile. It must
+// match the value the worker sets in script mode.
+const kindScriptProfile = "ScriptProfile"
+
+// applyReport records the report on the owning profile's status, routing to the
+// correct CRD by Kind and retrying on conflict.
 func (s *ReportServer) applyReport(ctx context.Context, report *StatusReport) error {
+	if report.Kind == kindScriptProfile {
+		return s.applyScriptReport(ctx, report)
+	}
+
 	key := types.NamespacedName{Name: report.Profile, Namespace: report.Namespace}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
@@ -208,6 +220,81 @@ func upsertNodeStatus(profile *sysctlv1alpha1.SysctlProfile, report *StatusRepor
 
 // recomputeCounts refreshes the aggregate node counters from per-node status.
 func recomputeCounts(profile *sysctlv1alpha1.SysctlProfile) {
+	var applied, failed int32
+	for _, ns := range profile.Status.NodeStatuses {
+		switch ns.Phase {
+		case sysctlv1alpha1.NodePhaseApplied:
+			applied++
+		case sysctlv1alpha1.NodePhaseFailed:
+			failed++
+		}
+	}
+	profile.Status.AppliedNodes = applied
+	profile.Status.FailedNodes = failed
+}
+
+// applyScriptReport records the report on the owning ScriptProfile's status,
+// retrying on conflict. Once every selected node reports success at the current
+// hash, the controller's next reconcile tears down the runner DaemonSet.
+func (s *ReportServer) applyScriptReport(ctx context.Context, report *StatusReport) error {
+	key := types.NamespacedName{Name: report.Profile, Namespace: report.Namespace}
+
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var profile sysctlv1alpha1.ScriptProfile
+		if err := s.Client.Get(ctx, key, &profile); err != nil {
+			return err
+		}
+
+		phase := sysctlv1alpha1.NodePhaseApplied
+		if !report.Success {
+			phase = sysctlv1alpha1.NodePhaseFailed
+		}
+
+		upsertScriptNodeStatus(&profile, report, phase)
+		recomputeScriptCounts(&profile)
+
+		return s.Client.Status().Update(ctx, &profile)
+	})
+}
+
+// upsertScriptNodeStatus inserts or updates the per-node entry for the report on
+// a ScriptProfile. Unlike the sysctl variant, ScriptProfile has no ErroredPods
+// counter, so failures are tracked only via the per-node FailCount/phase.
+func upsertScriptNodeStatus(profile *sysctlv1alpha1.ScriptProfile, report *StatusReport, phase sysctlv1alpha1.NodePhase) {
+	now := metav1.Now()
+	for i := range profile.Status.NodeStatuses {
+		ns := &profile.Status.NodeStatuses[i]
+		if ns.NodeName != report.Node {
+			continue
+		}
+		if !report.Success {
+			ns.FailCount++
+		} else {
+			ns.FailCount = 0
+			ns.AppliedHash = report.Hash
+		}
+		ns.Phase = phase
+		ns.Message = report.Message
+		ns.LastTransitionTime = now
+		return
+	}
+
+	ns := sysctlv1alpha1.NodeStatus{
+		NodeName:           report.Node,
+		Phase:              phase,
+		Message:            report.Message,
+		LastTransitionTime: now,
+	}
+	if report.Success {
+		ns.AppliedHash = report.Hash
+	} else {
+		ns.FailCount = 1
+	}
+	profile.Status.NodeStatuses = append(profile.Status.NodeStatuses, ns)
+}
+
+// recomputeScriptCounts refreshes the aggregate node counters from per-node status.
+func recomputeScriptCounts(profile *sysctlv1alpha1.ScriptProfile) {
 	var applied, failed int32
 	for _, ns := range profile.Status.NodeStatuses {
 		switch ns.Phase {

@@ -54,10 +54,10 @@ const (
 	hostSysPath       = "/proc/sys"
 	// applierImage is the placeholder image used to run the applier pods.
 	// TODO: replace with an image that actually applies the mounted sysctls.
-	applierImage = "emirozbir/sysctl-operator-worker:v6-amd64"
+	applierImage = "emirozbir/sysctl-operator-worker:v9-amd64"
 	// driftCheckerImage is the placeholder image for the drift-check CronJob.
 	// TODO: replace with the real drift-checker image (passed in later).
-	driftCheckerImage = "emirozbir/sysctl-operator-worker:v6-amd64"
+	driftCheckerImage = "emirozbir/sysctl-operator-worker:v9-amd64"
 	// reportURL is where drift-check pods POST their findings. It assumes a
 	// Service named "sysctl-operator-report" fronts the operator on port 9090.
 	// TODO: make this configurable / inject the operator namespace.

@@ -30,6 +30,9 @@ import (
 type Report struct {
 	Profile   string   `json:"profile"`
 	Namespace string   `json:"namespace"`
+	// Kind routes the report to the owning CRD ("ScriptProfile"); empty means
+	// SysctlProfile (the default, for backward compatibility).
+	Kind      string   `json:"kind,omitempty"`
 	Node      string   `json:"node"`
 	Pod       string   `json:"pod,omitempty"`
 	Hash      string   `json:"hash,omitempty"`

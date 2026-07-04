@@ -93,6 +93,9 @@ func main() {
 		verifyHash(scfg.Hash, expected)
 		log.Printf("loaded %d scripts hash=%s mode=%s", len(scfg.Scripts), scfg.Hash, mode)
 		rep.Hash = scfg.Hash
+		// Route the report to the ScriptProfile status (must match the server's
+		// kindScriptProfile constant).
+		rep.Kind = "ScriptProfile"
 		res := worker.RunScripts(scfg.Scripts)
 		rep.Applied, rep.Failed = res.Applied, res.Failed
 		rep.Success = res.OK()

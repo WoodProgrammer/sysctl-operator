@@ -5,7 +5,7 @@
 # Re-include Go source files (but not *_test.go)
 !**/*.go
 **/*_test.go
-
+**./bin
 # Re-include Go module files
 !go.mod
 !go.sum

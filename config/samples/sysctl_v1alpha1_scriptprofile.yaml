@@ -15,13 +15,6 @@ spec:
     - name: disable-thp
       interpreter: /bin/sh
       content: |
-        echo never > /sys/kernel/mm/transparent_hugepage/enabled
-        echo never > /sys/kernel/mm/transparent_hugepage/defrag
-        echo "ADAM MISINIZ LAN!!!!"
-
-    - name: load-modules
-      interpreter: /bin/bash
-      content: |
-        set -euo pipefail
-        modprobe br_netfilter
-        modprobe overlay
+        echo always > /sys/kernel/mm/transparent_hugepage/enabled
+        echo always > /sys/kernel/mm/transparent_hugepage/defrag
+        

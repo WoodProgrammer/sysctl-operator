@@ -26,11 +26,15 @@ import (
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	sysctlv1alpha1 "sysctl-operator/api/v1alpha1"
 )
@@ -59,6 +63,9 @@ type ScriptProfileReconciler struct {
 // +kubebuilder:rbac:groups=sysctl.k8s.io,resources=scriptprofiles,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=sysctl.k8s.io,resources=scriptprofiles/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=sysctl.k8s.io,resources=scriptprofiles/finalizers,verbs=update
+// +kubebuilder:rbac:groups=apps,resources=daemonsets,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups="",resources=nodes,verbs=get;list;watch
 
 // Reconcile renders the profile's scripts into a ConfigMap and ensures a
 // DaemonSet (pinned to the profile's nodeSelector) runs them on each node,
@@ -129,11 +136,13 @@ func (r *ScriptProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	// 3. Roll out vs. tear down. Once every selected node has reported a
-	// successful run at the current hash, the runner DaemonSet has done its job
-	// and is retired. teardownHash prevents recreation until the config changes.
-	rolloutComplete := profile.Status.TeardownHash == hash ||
-		scriptAllNodesApplied(&profile, selected, hash)
+	// 3. Roll out vs. tear down. The DaemonSet exists exactly while some selected
+	// node still hasn't run the scripts at the current hash. Evaluating this
+	// against the live selected set (rather than short-circuiting on TeardownHash)
+	// is what lets a newly-joined node re-trigger a rollout: it isn't Applied yet,
+	// so the DaemonSet is recreated, runs on the new node, and is torn down again
+	// once every node has reported success. teardownHash is kept for observability.
+	rolloutComplete := scriptAllNodesApplied(&profile, selected, hash)
 
 	switch {
 	case rolloutComplete:
@@ -366,12 +375,42 @@ func scriptLabelsFor(p *sysctlv1alpha1.ScriptProfile) map[string]string {
 	}
 }
 
+// profilesForNode maps a Node event to reconcile requests for every
+// ScriptProfile whose nodeSelector matches that node. This is what makes a
+// newly-joined (or newly-relabeled) node re-trigger a rollout even after the
+// runner DaemonSet was torn down.
+func (r *ScriptProfileReconciler) profilesForNode(ctx context.Context, obj client.Object) []reconcile.Request {
+	node, ok := obj.(*corev1.Node)
+	if !ok {
+		return nil
+	}
+	var list sysctlv1alpha1.ScriptProfileList
+	if err := r.List(ctx, &list); err != nil {
+		return nil
+	}
+	var reqs []reconcile.Request
+	for i := range list.Items {
+		p := &list.Items[i]
+		sel, err := metav1.LabelSelectorAsSelector(&p.Spec.NodeSelector)
+		if err != nil {
+			continue
+		}
+		if sel.Matches(labels.Set(node.Labels)) {
+			reqs = append(reqs, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: p.Name, Namespace: p.Namespace},
+			})
+		}
+	}
+	return reqs
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *ScriptProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&sysctlv1alpha1.ScriptProfile{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&appsv1.DaemonSet{}).
+		Watches(&corev1.Node{}, handler.EnqueueRequestsFromMapFunc(r.profilesForNode)).
 		Named("scriptprofile").
 		Complete(r)
 }
