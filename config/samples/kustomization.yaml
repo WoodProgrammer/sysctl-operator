@@ -1,4 +1,5 @@
 ## Append samples of your project ##
 resources:
 - sysctl_v1alpha1_sysctlprofile.yaml
+- sysctl_v1alpha1_scriptprofile.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

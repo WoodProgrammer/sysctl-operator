@@ -1,0 +1,27 @@
+apiVersion: sysctl.k8s.io/v1alpha1
+kind: ScriptProfile
+metadata:
+  name: node-bootstrap
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: sysctl-operator
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  nodeSelector:
+    matchLabels:
+      sysctlstack: tuned
+
+  scripts:
+    - name: disable-thp
+      interpreter: /bin/sh
+      content: |
+        echo never > /sys/kernel/mm/transparent_hugepage/enabled
+        echo never > /sys/kernel/mm/transparent_hugepage/defrag
+        echo "ADAM MISINIZ LAN!!!!"
+
+    - name: load-modules
+      interpreter: /bin/bash
+      content: |
+        set -euo pipefail
+        modprobe br_netfilter
+        modprobe overlay

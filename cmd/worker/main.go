@@ -33,8 +33,9 @@ import (
 )
 
 const (
-	modeApply = "apply"
-	modeCheck = "check"
+	modeApply  = "apply"
+	modeCheck  = "check"
+	modeScript = "script"
 )
 
 func main() {
@@ -42,8 +43,8 @@ func main() {
 	configPath := getenv("CONFIG_PATH", "/etc/sysctl.d/99-sysctl-operator.conf")
 	procRoot := getenv("PROC_ROOT", "/proc/sys")
 
-	flag.StringVar(&mode, "mode", mode, "apply | check")
-	flag.StringVar(&configPath, "config", configPath, "path to the mounted sysctl drop-in")
+	flag.StringVar(&mode, "mode", mode, "apply | check | script")
+	flag.StringVar(&configPath, "config", configPath, "path to the mounted config")
 	flag.StringVar(&procRoot, "proc-root", procRoot, "root of the sysctl tree (override for tests)")
 	flag.Parse()
 
@@ -56,48 +57,56 @@ func main() {
 		reportURL = os.Getenv("REPORT_URL")
 	)
 
-	cfg, err := worker.Load(configPath)
-	if err != nil {
-		log.Fatalf("load config %q: %v", configPath, err)
-	}
-
-	// Hash check: refuse to act on a config that doesn't match what the
-	// operator expects (e.g. a stale ConfigMap that hasn't propagated yet).
-	if expected != "" && cfg.Hash != expected {
-		log.Fatalf("config hash mismatch: mounted=%s expected=%s (stale ConfigMap?)", cfg.Hash, expected)
-	}
-	log.Printf("loaded %d sysctls hash=%s mode=%s", len(cfg.Entries), cfg.Hash, mode)
-
 	rep := worker.Report{
 		Profile:   profile,
 		Namespace: namespace,
 		Node:      node,
 		Pod:       pod,
-		Hash:      cfg.Hash,
 	}
 
 	switch mode {
-	case modeApply:
-		res := worker.Apply(procRoot, cfg.Entries)
+	case modeApply, modeCheck:
+		cfg, err := worker.Load(configPath)
+		if err != nil {
+			log.Fatalf("load config %q: %v", configPath, err)
+		}
+		verifyHash(cfg.Hash, expected)
+		log.Printf("loaded %d sysctls hash=%s mode=%s", len(cfg.Entries), cfg.Hash, mode)
+		rep.Hash = cfg.Hash
+		if mode == modeApply {
+			res := worker.Apply(procRoot, cfg.Entries)
+			rep.Applied, rep.Failed = res.Applied, res.Failed
+			rep.Success = res.OK()
+			rep.Message = summarize("applied", res)
+		} else {
+			res := worker.Check(procRoot, cfg.Entries)
+			rep.Applied = res.Applied
+			rep.Failed = append(append([]string{}, res.Failed...), res.Drifted...)
+			rep.Success = res.OK()
+			rep.Message = summarize("checked", res)
+		}
+	case modeScript:
+		scfg, err := worker.LoadScripts(configPath)
+		if err != nil {
+			log.Fatalf("load scripts %q: %v", configPath, err)
+		}
+		verifyHash(scfg.Hash, expected)
+		log.Printf("loaded %d scripts hash=%s mode=%s", len(scfg.Scripts), scfg.Hash, mode)
+		rep.Hash = scfg.Hash
+		res := worker.RunScripts(scfg.Scripts)
 		rep.Applied, rep.Failed = res.Applied, res.Failed
 		rep.Success = res.OK()
-		rep.Message = summarize("applied", res)
-	case modeCheck:
-		res := worker.Check(procRoot, cfg.Entries)
-		rep.Applied = res.Applied
-		rep.Failed = append(append([]string{}, res.Failed...), res.Drifted...)
-		rep.Success = res.OK()
-		rep.Message = summarize("checked", res)
+		rep.Message = summarize("ran", res)
 	default:
-		log.Fatalf("unknown mode %q (want %q or %q)", mode, modeApply, modeCheck)
+		log.Fatalf("unknown mode %q (want %q, %q or %q)", mode, modeApply, modeCheck, modeScript)
 	}
 
 	sendReport(reportURL, rep)
 
-	// In apply mode the process backs a DaemonSet, which expects a long-lived
-	// container. Block until the operator tears the DaemonSet down (SIGTERM).
-	// In check mode the process backs a one-shot CronJob, so we exit.
-	if mode == modeApply {
+	// apply and script back a DaemonSet, which expects a long-lived container:
+	// block until the operator tears the DaemonSet down (SIGTERM). check backs a
+	// one-shot CronJob, so we exit.
+	if mode == modeApply || mode == modeScript {
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 		log.Printf("apply complete; waiting for shutdown signal")
@@ -118,6 +127,14 @@ func sendReport(url string, rep worker.Report) {
 		return
 	}
 	log.Printf("reported success=%v to %s", rep.Success, url)
+}
+
+// verifyHash refuses to act on a config that doesn't match what the operator
+// expects (e.g. a stale ConfigMap that hasn't propagated yet).
+func verifyHash(got, expected string) {
+	if expected != "" && got != expected {
+		log.Fatalf("config hash mismatch: mounted=%s expected=%s (stale ConfigMap?)", got, expected)
+	}
 }
 
 func summarize(verb string, res worker.Result) string {

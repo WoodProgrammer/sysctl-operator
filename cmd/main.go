@@ -189,6 +189,13 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "sysctlprofile")
 		os.Exit(1)
 	}
+	if err := (&controller.ScriptProfileReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "scriptprofile")
+		os.Exit(1)
+	}
 	// +kubebuilder:scaffold:builder
 
 	// Register the HTTP API that applier pods POST their apply-status to.
