@@ -28,18 +28,18 @@ import (
 // Report is the payload POSTed to the operator's /api/v1/reports endpoint. Its
 // JSON shape must match the operator's server.StatusReport.
 type Report struct {
-	Profile   string   `json:"profile"`
-	Namespace string   `json:"namespace"`
+	Profile   string `json:"profile"`
+	Namespace string `json:"namespace"`
 	// Kind routes the report to the owning CRD ("ScriptProfile"); empty means
 	// SysctlProfile (the default, for backward compatibility).
-	Kind      string   `json:"kind,omitempty"`
-	Node      string   `json:"node"`
-	Pod       string   `json:"pod,omitempty"`
-	Hash      string   `json:"hash,omitempty"`
-	Success   bool     `json:"success"`
-	Applied   []string `json:"applied,omitempty"`
-	Failed    []string `json:"failed,omitempty"`
-	Message   string   `json:"message,omitempty"`
+	Kind    string   `json:"kind,omitempty"`
+	Node    string   `json:"node"`
+	Pod     string   `json:"pod,omitempty"`
+	Hash    string   `json:"hash,omitempty"`
+	Success bool     `json:"success"`
+	Applied []string `json:"applied,omitempty"`
+	Failed  []string `json:"failed,omitempty"`
+	Message string   `json:"message,omitempty"`
 }
 
 // Reporter sends reports to the operator API.

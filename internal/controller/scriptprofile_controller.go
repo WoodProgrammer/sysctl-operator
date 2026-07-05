@@ -231,9 +231,21 @@ func (r *ScriptProfileReconciler) ensureScriptDaemonSet(ctx context.Context, pro
 				},
 			},
 			{
-				Name: hostSysVolumeName,
+				Name: hostSystemdVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					HostPath: &corev1.HostPathVolumeSource{Path: hostSysPath},
+					HostPath: &corev1.HostPathVolumeSource{Path: hostSystemdPath},
+				},
+			},
+			{
+				Name: hostDbusVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{Path: hostDbusPath},
+				},
+			},
+			{
+				Name: "cgroup-path",
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/cgroup"},
 				},
 			},
 		}
@@ -246,6 +258,21 @@ func (r *ScriptProfileReconciler) ensureScriptDaemonSet(ctx context.Context, pro
 				{
 					Name:      configVolumeName,
 					MountPath: scriptConfigMountPath,
+					ReadOnly:  true,
+				},
+				{
+					Name:      hostSystemdVolumeName,
+					MountPath: hostSystemdPath,
+					ReadOnly:  true,
+				},
+				{
+					Name:      hostDbusVolumeName,
+					MountPath: hostDbusPath,
+					ReadOnly:  true,
+				},
+				{
+					Name:      "cgroup-path",
+					MountPath: "/sys/fs/cgroup",
 					ReadOnly:  true,
 				},
 			},

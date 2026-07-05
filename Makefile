@@ -1,5 +1,5 @@
 # Image URL to use all building/pushing image targets
-IMG ?= emirozbir/sysctl-operator:v9-amd64
+IMG ?= emirozbir/sysctl-operator:v10-amd64
 # YEAR defines the year value used for substituting the YEAR placeholder in the boilerplate header.
 YEAR ?= $(shell date +%Y)
 

@@ -51,13 +51,20 @@ const (
 	// hostSysVolumeName / hostSysPath mount the node's /proc/sys into the pods
 	// so the worker reads and writes the host's live sysctl tree.
 	hostSysVolumeName = "host-sys"
-	hostSysPath       = "/proc/sys"
+
+	hostSystemdVolumeName = "host-systemd"
+	hostDbusVolumeName    = "host-dbus"
+	hostSysPath           = "/proc/sys"
+
+	hostSystemdPath    = "/run/systemd"
+	hostDbusPath       = "/run/dbus"
+	hostPathCgroupPath = "/sys/fs/cgroup"
 	// applierImage is the placeholder image used to run the applier pods.
 	// TODO: replace with an image that actually applies the mounted sysctls.
-	applierImage = "emirozbir/sysctl-operator-worker:v9-amd64"
+	applierImage = "emirozbir/sysctl-operator-worker:v10-amd64"
 	// driftCheckerImage is the placeholder image for the drift-check CronJob.
 	// TODO: replace with the real drift-checker image (passed in later).
-	driftCheckerImage = "emirozbir/sysctl-operator-worker:v9-amd64"
+	driftCheckerImage = "emirozbir/sysctl-operator-worker:v10-amd64"
 	// reportURL is where drift-check pods POST their findings. It assumes a
 	// Service named "sysctl-operator-report" fronts the operator on port 9090.
 	// TODO: make this configurable / inject the operator namespace.
@@ -263,9 +270,15 @@ func (r *SysctlProfileReconciler) ensureDaemonSet(ctx context.Context, profile *
 				},
 			},
 			{
-				Name: hostSysVolumeName,
+				Name: hostSystemdVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					HostPath: &corev1.HostPathVolumeSource{Path: hostSysPath},
+					HostPath: &corev1.HostPathVolumeSource{Path: hostSystemdPath},
+				},
+			},
+			{
+				Name: hostDbusVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{Path: hostDbusPath},
 				},
 			},
 		}
@@ -348,14 +361,20 @@ func (r *SysctlProfileReconciler) ensureCronJob(ctx context.Context, profile *sy
 				Name: configVolumeName,
 				VolumeSource: corev1.VolumeSource{
 					ConfigMap: &corev1.ConfigMapVolumeSource{
-						LocalObjectReference: corev1.LocalObjectReference{Name: resourceName(profile)},
+						LocalObjectReference: corev1.LocalObjectReference{Name: name},
 					},
 				},
 			},
 			{
-				Name: hostSysVolumeName,
+				Name: hostSystemdVolumeName,
 				VolumeSource: corev1.VolumeSource{
-					HostPath: &corev1.HostPathVolumeSource{Path: hostSysPath},
+					HostPath: &corev1.HostPathVolumeSource{Path: hostSystemdPath},
+				},
+			},
+			{
+				Name: hostDbusVolumeName,
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{Path: hostDbusPath},
 				},
 			},
 		}
