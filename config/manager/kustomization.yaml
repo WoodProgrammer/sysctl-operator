@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: emirozbir/sysctl-operator
-  newTag: v9-amd64
+  newTag: v10-amd64
