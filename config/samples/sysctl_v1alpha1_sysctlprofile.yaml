@@ -30,7 +30,7 @@ spec:
       persistent: true
 
     - name: net.core.wmem_max
-      value: "16777218
+      value: "16777219
       "
       persistent: true
 

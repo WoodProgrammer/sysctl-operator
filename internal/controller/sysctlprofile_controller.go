@@ -29,11 +29,16 @@ import (
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	sysctlv1alpha1 "sysctl-operator/api/v1alpha1"
 )
@@ -172,12 +177,13 @@ func (r *SysctlProfileReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	// 4. Roll out vs. tear down. Once every selected node has reported a
-	// successful apply at the current hash, the applier DaemonSet has done its
-	// job and is retired. teardownHash prevents it from being recreated until
-	// the config changes.
-	rolloutComplete := profile.Status.TeardownHash == hash ||
-		allNodesApplied(&profile, selected, hash)
+	// 4. Roll out vs. tear down. The applier DaemonSet exists exactly while some
+	// selected node still hasn't applied the current hash. Evaluating this against
+	// the live selected set (rather than short-circuiting on TeardownHash) is what
+	// lets a newly-joined node re-trigger a rollout: it isn't Applied yet, so the
+	// DaemonSet is recreated, applies on the new node, and is torn down again once
+	// every node has reported success. teardownHash is kept for observability.
+	rolloutComplete := allNodesApplied(&profile, selected, hash)
 
 	switch {
 	case rolloutComplete:
@@ -525,6 +531,35 @@ func labelsFor(p *sysctlv1alpha1.SysctlProfile) map[string]string {
 	}
 }
 
+// profilesForNode maps a Node event to reconcile requests for every
+// SysctlProfile whose nodeSelector matches that node. This is what makes a
+// newly-joined (or newly-relabeled) node re-trigger a rollout even after the
+// applier DaemonSet was torn down.
+func (r *SysctlProfileReconciler) profilesForNode(ctx context.Context, obj client.Object) []reconcile.Request {
+	node, ok := obj.(*corev1.Node)
+	if !ok {
+		return nil
+	}
+	var list sysctlv1alpha1.SysctlProfileList
+	if err := r.List(ctx, &list); err != nil {
+		return nil
+	}
+	var reqs []reconcile.Request
+	for i := range list.Items {
+		p := &list.Items[i]
+		sel, err := metav1.LabelSelectorAsSelector(&p.Spec.NodeSelector)
+		if err != nil {
+			continue
+		}
+		if sel.Matches(labels.Set(node.Labels)) {
+			reqs = append(reqs, reconcile.Request{
+				NamespacedName: types.NamespacedName{Name: p.Name, Namespace: p.Namespace},
+			})
+		}
+	}
+	return reqs
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *SysctlProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
@@ -532,6 +567,8 @@ func (r *SysctlProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.ConfigMap{}).
 		Owns(&appsv1.DaemonSet{}).
 		Owns(&batchv1.CronJob{}).
+		Watches(&corev1.Node{}, handler.EnqueueRequestsFromMapFunc(r.profilesForNode),
+			builder.WithPredicates(nodeLabelChanged())).
 		Named("sysctlprofile").
 		Complete(r)
 }

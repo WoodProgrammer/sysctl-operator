@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -437,7 +438,8 @@ func (r *ScriptProfileReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&sysctlv1alpha1.ScriptProfile{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&appsv1.DaemonSet{}).
-		Watches(&corev1.Node{}, handler.EnqueueRequestsFromMapFunc(r.profilesForNode)).
+		Watches(&corev1.Node{}, handler.EnqueueRequestsFromMapFunc(r.profilesForNode),
+			builder.WithPredicates(nodeLabelChanged())).
 		Named("scriptprofile").
 		Complete(r)
 }
