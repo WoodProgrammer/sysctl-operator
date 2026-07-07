@@ -45,6 +45,9 @@ spec:
             - --leader-elect
             {{- end }}
             - --report-bind-address=:{{ .Values.report.port }}
+            {{- with .Values.worker.image }}
+            - --worker-image={{ .repository }}:{{ .tag }}
+            {{- end }}
             {{- if .Values.metrics.enabled }}
             - --metrics-bind-address=:{{ .Values.metrics.port }}
             - --metrics-secure={{ .Values.metrics.secure }}

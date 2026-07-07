@@ -69,9 +69,15 @@ kubectl apply -f deploy/sysctl-operator/crds/
 ## The worker image
 
 The worker image the operator launches (applier DaemonSet, drift CronJob, script
-runner) is currently **compiled into the operator** (`applierImage` in
-`internal/controller`). The `worker.image.*` values are informational until the
-operator is updated to read the image from configuration.
+runner) is configurable via `worker.image.*`, which the chart passes to the
+manager as `--worker-image`. Changing it takes effect on the next reconcile — no
+operator rebuild needed. If unset, the manager falls back to `$WORKER_IMAGE` and
+then to the built-in `controller.DefaultWorkerImage`.
+
+```bash
+helm upgrade sysctl-operator ./deploy/sysctl-operator -n sysctl-operator-system \
+  --set worker.image.tag=v11-amd64
+```
 
 ## Uninstall
 

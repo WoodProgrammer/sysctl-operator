@@ -64,12 +64,11 @@ const (
 	hostSystemdPath    = "/run/systemd"
 	hostDbusPath       = "/run/dbus"
 	hostPathCgroupPath = "/sys/fs/cgroup"
-	// applierImage is the placeholder image used to run the applier pods.
-	// TODO: replace with an image that actually applies the mounted sysctls.
-	applierImage = "emirozbir/sysctl-operator-worker:v10-amd64"
-	// driftCheckerImage is the placeholder image for the drift-check CronJob.
-	// TODO: replace with the real drift-checker image (passed in later).
-	driftCheckerImage = "emirozbir/sysctl-operator-worker:v10-amd64"
+	// DefaultWorkerImage is the worker image used when the manager is started
+	// without --worker-image. The same image backs the applier DaemonSet, the
+	// drift-check CronJob and the script runner; the MODE env var selects the
+	// behavior. Override per-deployment via the reconciler's WorkerImage field.
+	DefaultWorkerImage = "emirozbir/sysctl-operator-worker:v10-amd64"
 	// reportURL is where drift-check pods POST their findings. It assumes a
 	// Service named "sysctl-operator-report" fronts the operator on port 9090.
 	// TODO: make this configurable / inject the operator namespace.
@@ -86,6 +85,17 @@ const (
 type SysctlProfileReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	// WorkerImage is the image used for the applier DaemonSet and drift-check
+	// CronJob pods. When empty, DefaultWorkerImage is used.
+	WorkerImage string
+}
+
+// workerImage returns the configured worker image, falling back to the default.
+func (r *SysctlProfileReconciler) workerImage() string {
+	if r.WorkerImage != "" {
+		return r.WorkerImage
+	}
+	return DefaultWorkerImage
 }
 
 // +kubebuilder:rbac:groups=sysctl.k8s.io,resources=sysctlprofiles,verbs=get;list;watch;create;update;patch;delete
@@ -290,7 +300,7 @@ func (r *SysctlProfileReconciler) ensureDaemonSet(ctx context.Context, profile *
 		}
 		ds.Spec.Template.Spec.Containers = []corev1.Container{{
 			Name:            "applier",
-			Image:           applierImage,
+			Image:           r.workerImage(),
 			ImagePullPolicy: imagePullPolicy,
 			SecurityContext: privilegedSecurityContext(),
 			VolumeMounts: []corev1.VolumeMount{
@@ -386,7 +396,7 @@ func (r *SysctlProfileReconciler) ensureCronJob(ctx context.Context, profile *sy
 		}
 		pod.Containers = []corev1.Container{{
 			Name:            "drift-checker",
-			Image:           driftCheckerImage,
+			Image:           r.workerImage(),
 			ImagePullPolicy: imagePullPolicy,
 			SecurityContext: privilegedSecurityContext(),
 			Env: []corev1.EnvVar{

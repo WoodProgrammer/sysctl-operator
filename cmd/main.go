@@ -61,6 +61,7 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var reportAddr string
+	var workerImage string
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
@@ -69,6 +70,13 @@ func main() {
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.StringVar(&reportAddr, "report-bind-address", ":9090",
 		"The address the applier-pod report API endpoint binds to.")
+	workerImageDefault := controller.DefaultWorkerImage
+	if v := os.Getenv("WORKER_IMAGE"); v != "" {
+		workerImageDefault = v
+	}
+	flag.StringVar(&workerImage, "worker-image", workerImageDefault,
+		"Container image for the worker pods (applier / drift-check / script runner). "+
+			"Defaults to $WORKER_IMAGE, then the built-in default.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -183,15 +191,17 @@ func main() {
 	}
 
 	if err := (&controller.SysctlProfileReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		WorkerImage: workerImage,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "sysctlprofile")
 		os.Exit(1)
 	}
 	if err := (&controller.ScriptProfileReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:      mgr.GetClient(),
+		Scheme:      mgr.GetScheme(),
+		WorkerImage: workerImage,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "scriptprofile")
 		os.Exit(1)

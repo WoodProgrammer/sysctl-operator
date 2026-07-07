@@ -59,6 +59,17 @@ const (
 type ScriptProfileReconciler struct {
 	client.Client
 	Scheme *runtime.Scheme
+	// WorkerImage is the image used for the script-runner DaemonSet pods. When
+	// empty, DefaultWorkerImage is used.
+	WorkerImage string
+}
+
+// workerImage returns the configured worker image, falling back to the default.
+func (r *ScriptProfileReconciler) workerImage() string {
+	if r.WorkerImage != "" {
+		return r.WorkerImage
+	}
+	return DefaultWorkerImage
 }
 
 // +kubebuilder:rbac:groups=sysctl.k8s.io,resources=scriptprofiles,verbs=get;list;watch;create;update;patch;delete
@@ -252,7 +263,7 @@ func (r *ScriptProfileReconciler) ensureScriptDaemonSet(ctx context.Context, pro
 		}
 		ds.Spec.Template.Spec.Containers = []corev1.Container{{
 			Name:            "runner",
-			Image:           applierImage,
+			Image:           r.workerImage(),
 			ImagePullPolicy: imagePullPolicy,
 			SecurityContext: privilegedSecurityContext(),
 			VolumeMounts: []corev1.VolumeMount{

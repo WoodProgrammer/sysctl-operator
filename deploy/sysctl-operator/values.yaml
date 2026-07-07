@@ -16,15 +16,13 @@ image:
 # imagePullSecrets for private registries, e.g. [{ name: my-regcred }].
 imagePullSecrets: []
 
-# IMPORTANT: the worker image the operator launches for applier DaemonSets,
-# drift-check CronJobs and script runners is currently COMPILED INTO the
-# operator (see applierImage in internal/controller). This block is
-# informational only — changing it here does NOT change what the operator runs
-# until the operator is updated to read the image from configuration.
+# Worker image the operator launches for applier DaemonSets, drift-check
+# CronJobs and script runners. Passed to the manager via --worker-image, so
+# changing it here takes effect on the next reconcile (no operator rebuild).
 worker:
   image:
     repository: emirozbir/sysctl-operator-worker
-    tag: v6-amd64
+    tag: v10-amd64
 
 # NOTE on CRDs: the SysctlProfile / ScriptProfile CRDs live in the chart's
 # crds/ directory. Helm installs them automatically on `helm install` (and skips
