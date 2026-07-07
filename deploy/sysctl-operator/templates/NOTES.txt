@@ -1,0 +1,42 @@
+sysctl-operator {{ .Chart.AppVersion }} has been deployed.
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+{{- if ne .Release.Namespace "sysctl-operator-system" }}
+
+⚠️  WARNING: this release is installed in "{{ .Release.Namespace }}", but the
+    operator has its report URL compiled in as
+        http://{{ .Values.report.serviceName }}.sysctl-operator-system:9090
+    Worker pods will POST their status to the sysctl-operator-system namespace
+    and will NOT find this Service here. Reinstall with:
+        helm install {{ .Release.Name }} . -n sysctl-operator-system --create-namespace
+{{- end }}
+
+1. Check the manager is running:
+
+   kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "sysctl-operator.fullname" . }}
+
+2. Apply a SysctlProfile (kernel parameters) or ScriptProfile (custom scripts).
+   Example — tune sysctls on nodes labelled sysctlstack=tuned:
+
+   cat <<'EOF' | kubectl apply -f -
+   apiVersion: sysctl.k8s.io/v1alpha1
+   kind: SysctlProfile
+   metadata:
+     name: network-optimized
+     namespace: kube-system
+   spec:
+     nodeSelector:
+       matchLabels:
+         sysctlstack: tuned
+     sysctls:
+       - name: net.core.somaxconn
+         value: "65535"
+   EOF
+
+3. Watch the rollout. The operator creates an applier DaemonSet, waits until
+   every selected node reports success, then tears the DaemonSet down:
+
+   kubectl -n kube-system get sysctlprofile network-optimized \
+     -o jsonpath='{.status.nodeStatuses}' | jq

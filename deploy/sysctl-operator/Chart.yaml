@@ -1,0 +1,19 @@
+apiVersion: v2
+name: sysctl-operator
+description: >-
+  Kubernetes operator that applies sysctl parameters and custom scripts to
+  selected nodes via SysctlProfile and ScriptProfile custom resources.
+type: application
+# Chart version — bump on any change to the chart.
+version: 0.1.0
+# Operator version this chart deploys (matches the manager image tag by default).
+appVersion: "0.1.0"
+keywords:
+  - sysctl
+  - operator
+  - node-configuration
+home: https://github.com/emirozbir/sysctl-operator
+sources:
+  - https://github.com/emirozbir/sysctl-operator
+maintainers:
+  - name: emirozbir

@@ -1,0 +1,97 @@
+# Default values for the sysctl-operator chart.
+
+# -- Number of manager replicas. Leader election ensures only one is active.
+replicaCount: 1
+
+nameOverride: ""
+fullnameOverride: ""
+
+# Manager (operator) image. Set tag to the image you built and pushed
+# (see the Makefile IMG variable). Falls back to the chart appVersion if empty.
+image:
+  repository: emirozbir/sysctl-operator
+  tag: "v8-amd64"
+  pullPolicy: IfNotPresent
+
+# imagePullSecrets for private registries, e.g. [{ name: my-regcred }].
+imagePullSecrets: []
+
+# IMPORTANT: the worker image the operator launches for applier DaemonSets,
+# drift-check CronJobs and script runners is currently COMPILED INTO the
+# operator (see applierImage in internal/controller). This block is
+# informational only — changing it here does NOT change what the operator runs
+# until the operator is updated to read the image from configuration.
+worker:
+  image:
+    repository: emirozbir/sysctl-operator-worker
+    tag: v6-amd64
+
+# NOTE on CRDs: the SysctlProfile / ScriptProfile CRDs live in the chart's
+# crds/ directory. Helm installs them automatically on `helm install` (and skips
+# any that already exist), and — by design — never deletes them on uninstall, so
+# existing profiles survive a chart removal. Helm does NOT upgrade CRDs on
+# `helm upgrade`; apply CRD changes manually when they evolve, e.g.:
+#   kubectl apply -f deploy/sysctl-operator/crds/
+
+serviceAccount:
+  create: true
+  # Name of the ServiceAccount; generated from the release name when empty.
+  name: ""
+  annotations: {}
+
+rbac:
+  # Create the ClusterRole/ClusterRoleBinding and leader-election Role/RoleBinding.
+  create: true
+
+# Leader election — keep enabled for HA / safe rolling updates.
+leaderElection:
+  enabled: true
+
+# Report API the applier/drift/script worker pods POST their status to.
+# The operator has the report URL COMPILED IN as
+#   http://sysctl-operator-report.sysctl-operator-system:9090/api/v1/reports
+# so the Service name and port below are fixed, and the chart MUST be installed
+# into the sysctl-operator-system namespace. Do not change these unless you also
+# change the source constants and rebuild the operator.
+report:
+  serviceName: sysctl-operator-report
+  port: 9090
+
+# Prometheus metrics endpoint. Disabled by default to keep the install simple
+# (secure serving would require certificates / auth-delegation RBAC).
+metrics:
+  enabled: false
+  port: 8443
+  # Serve metrics over HTTPS with authn/authz. When false, metrics are served
+  # as plain HTTP on the port below.
+  secure: true
+
+# Manager pod resources.
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+# Pod-level security context (restricted PSS).
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level security context for the manager.
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

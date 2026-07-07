@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  # Name is fixed: worker pods reach it via the operator's compiled-in report URL
+  # (sysctl-operator-report.sysctl-operator-system:9090). See values.yaml.
+  name: {{ .Values.report.serviceName }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "sysctl-operator.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "sysctl-operator.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: report
+      port: {{ .Values.report.port }}
+      targetPort: report
+      protocol: TCP
