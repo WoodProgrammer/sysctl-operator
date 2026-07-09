@@ -21,7 +21,8 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -175,6 +176,13 @@ func (in *ScriptProfileList) DeepCopyObject() runtime.Object {
 func (in *ScriptProfileSpec) DeepCopyInto(out *ScriptProfileSpec) {
 	*out = *in
 	in.NodeSelector.DeepCopyInto(&out.NodeSelector)
+	if in.Tolerations != nil {
+		in, out := &in.Tolerations, &out.Tolerations
+		*out = make([]v1.Toleration, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	if in.Scripts != nil {
 		in, out := &in.Scripts, &out.Scripts
 		*out = make([]Script, len(*in))
@@ -204,7 +212,7 @@ func (in *ScriptProfileStatus) DeepCopyInto(out *ScriptProfileStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
@@ -319,6 +327,13 @@ func (in *SysctlProfileList) DeepCopyObject() runtime.Object {
 func (in *SysctlProfileSpec) DeepCopyInto(out *SysctlProfileSpec) {
 	*out = *in
 	in.NodeSelector.DeepCopyInto(&out.NodeSelector)
+	if in.Tolerations != nil {
+		in, out := &in.Tolerations, &out.Tolerations
+		*out = make([]v1.Toleration, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
 	out.Rollout = in.Rollout
 	out.Schedule = in.Schedule
 	out.Strategy = in.Strategy
@@ -357,7 +372,7 @@ func (in *SysctlProfileStatus) DeepCopyInto(out *SysctlProfileStatus) {
 	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
-		*out = make([]v1.Condition, len(*in))
+		*out = make([]metav1.Condition, len(*in))
 		for i := range *in {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}

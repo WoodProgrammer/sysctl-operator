@@ -265,6 +265,7 @@ func (r *SysctlProfileReconciler) ensureDaemonSet(ctx context.Context, profile *
 
 		// DaemonSet node placement uses matchLabels from the profile selector.
 		ds.Spec.Template.Spec.NodeSelector = profile.Spec.NodeSelector.MatchLabels
+		ds.Spec.Template.Spec.Tolerations = profile.Spec.Tolerations
 
 		// Applier pods act on the host kernel: share the host network/PID/IPC
 		// namespaces so namespaced sysctls (net.*, kernel.ipc/*) target the node.
@@ -362,6 +363,7 @@ func (r *SysctlProfileReconciler) ensureCronJob(ctx context.Context, profile *sy
 		jobSpec.Template.Labels = labels
 		pod.RestartPolicy = corev1.RestartPolicyOnFailure
 		pod.NodeSelector = profile.Spec.NodeSelector.MatchLabels
+		pod.Tolerations = profile.Spec.Tolerations
 
 		// Same host namespaces as the applier so the checker reads the node's
 		// live values, not the pod's isolated namespaces.

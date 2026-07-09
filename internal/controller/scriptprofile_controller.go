@@ -225,6 +225,7 @@ func (r *ScriptProfileReconciler) ensureScriptDaemonSet(ctx context.Context, pro
 		ds.Spec.Template.Annotations[configHashAnn] = hash
 
 		ds.Spec.Template.Spec.NodeSelector = profile.Spec.NodeSelector.MatchLabels
+		ds.Spec.Template.Spec.Tolerations = profile.Spec.Tolerations
 
 		// Runner pods act on the host: share the host network/PID/IPC namespaces
 		// so scripts observe and affect the node, not the pod's namespaces.

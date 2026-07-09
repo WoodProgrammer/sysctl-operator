@@ -17,6 +17,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -120,6 +121,12 @@ type SysctlProfileSpec struct {
 	// nodeSelector selects the nodes this profile applies to.
 	// +required
 	NodeSelector metav1.LabelSelector `json:"nodeSelector"`
+
+	// tolerations are applied to the worker pods (applier DaemonSet and
+	// drift-check CronJob) so they can schedule onto tainted nodes matched by
+	// nodeSelector.
+	// +optional
+	Tolerations []corev1.Toleration `json:"tolerations,omitempty"`
 
 	// rollout controls batched rollout behavior.
 	// +optional
