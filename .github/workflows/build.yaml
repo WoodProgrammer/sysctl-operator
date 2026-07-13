@@ -1,0 +1,47 @@
+name: Sysctl Operator Build
+
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  build-and-push-operator:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract Tag Name
+        id: get_tag
+        run: echo "TAG=${GITHUB_REF##*/}" >> $GITHUB_ENV
+
+      - name: Build SysctlOperator
+        id: build_img
+        run: |
+          #!/bin/bash
+          set -e
+          export IMG=${IMAGE_TO_BUILD}
+          make docker-buildx
+        env:
+          IMAGE_TO_BUILD: "${{ secrets.DOCKERHUB_USERNAME }}/sysctl-operator:${{ env.TAG }}"
+
+      - name: Build SysctlOperator Worker
+        id: build_img_worker
+        run: |
+          #!/bin/bash
+          set -e
+          export IMG=${IMAGE_TO_BUILD}
+          make docker-buildx-worker
+        env:
+          IMAGE_TO_BUILD: "${{ secrets.DOCKERHUB_USERNAME }}/sysctl-operator-worker:${{ env.TAG }}"

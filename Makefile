@@ -144,6 +144,14 @@ docker-buildx: ## Build and push docker image for the manager for cross-platform
 	- $(CONTAINER_TOOL) buildx rm sysctl-operator-builder
 	rm Dockerfile.cross
 
+docker-buildx-worker:
+	sed -e '1 s/\(^FROM\)/FROM --platform=\$$\{BUILDPLATFORM\}/; t' -e ' 1,// s//FROM --platform=\$$\{BUILDPLATFORM\}/' Dockerfile.worker > Dockerfile.cross
+	- $(CONTAINER_TOOL) buildx create --name sysctl-operator-worker-builder
+	$(CONTAINER_TOOL) buildx use sysctl-operator-worker-builder
+	- $(CONTAINER_TOOL) buildx build --push --platform=$(PLATFORMS) --tag ${IMG} -f Dockerfile.cross .
+	- $(CONTAINER_TOOL) buildx rm sysctl-operator-worker-builder
+	rm Dockerfile.cross
+
 .PHONY: build-installer
 build-installer: manifests generate kustomize ## Generate a consolidated YAML with CRDs and deployment.
 	mkdir -p dist
