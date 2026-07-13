@@ -4,6 +4,7 @@ A Kubernetes operator that applies and continuously verifies **kernel `sysctl`
 parameters** on selected nodes, declaratively, via a `SysctlProfile` custom
 resource.
 
+<img src="img/logo.png"></img>
 ## Description
 
 You declare the sysctls you want and which nodes they belong on; the operator
